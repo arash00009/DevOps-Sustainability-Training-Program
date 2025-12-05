@@ -1,0 +1,59 @@
+# .github/workflows/green-mlops.yml
+name: Green MLOps Pipeline
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build-train:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'  # 💚 70% snabbare = lägre CO2
+
+      - name: Install deps
+        run: npm ci  # 💚 Snabbare än npm install
+
+      - name: Build
+        run: npm run build
+
+      - name: Train ML Model
+        run: npm run train
+
+      - name: Upload model artifact 💚
+        uses: actions/upload-artifact@v4
+        with:
+          name: protein-model
+          path: models/
+          retention-days: 1  # Minimal storage
+
+  test:
+    needs: build-train
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm test
+      - name: Security scan 💚
+        uses: github/codeql-action/analyze@v3
+
+  deploy:
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy to edge 💚
+        run: npm run deploy:staging
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
